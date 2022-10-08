@@ -1,31 +1,50 @@
-import json,config
+import json, config
+from flask import Flask, request, jsonify, render_template
 from binance.client import Client
 from binance.enums import *
-from flask import Flask,request
-app=Flask(__name__)
 
-client=Client(config.PASSPHRASE,config.API_KEY,config.API_PASS)
+app = Flask(__name__)
 
-def order(side,quantity,symbol,order_type=ORDER_TYPE_MARKET):
+client = Client(config.API_KEY, config.API_SECRET, tld='us')
+
+def order(side, quantity, symbol, order_type=ORDER_TYPE_MARKET):
     try:
-        print(f"Order submitted {side}---{quantity}---{symbol}---{order_type}")
-        order=client.create_order(side=side,quantity=quantity,symbol=symbol,order_type=order_type)
+        print(f"sending order {order_type} - {side} {quantity} {symbol}")
+        order = client.create_order(symbol=symbol, side=side, type=order_type, quantity=quantity)
     except Exception as e:
-        print(f"ERROR {e}")
+        print("an exception occured - {}".format(e))
         return False
+
     return order
-@app.route('/webhook',methods=["POST"])
 
+@app.route('/')
+def welcome():
+    return render_template('index.html')
+
+@app.route('/webhook', methods=['POST'])
 def webhook():
-    data=json.loads(request.data)
-    if data['passphrase'] !=config.PASSPHRASE:
+    #print(request.data)
+    data = json.loads(request.data)
+    
+    if data['passphrase'] != config.WEBHOOK_PASSPHRASE:
         return {
-            "code":"ERROR",
-            "message":"WRONG PASS"
+            "code": "error",
+            "message": "Nice try, invalid passphrase"
         }
-    print(request.data)
-    return {
-        "code":"success",
-        "message":data
-    }
 
+    side = data['strategy']['order_action'].upper()
+    quantity = data['strategy']['order_contracts']
+    order_response = order(side, quantity, "SOLUSD")
+
+    if order_response:
+        return {
+            "code": "success",
+            "message": "order executed"
+        }
+    else:
+        print("order failed")
+
+        return {
+            "code": "error",
+            "message": "order failed"
+        }
